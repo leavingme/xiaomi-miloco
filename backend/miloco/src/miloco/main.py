@@ -392,6 +392,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             "scheduler not started, CRUD degraded to DB-only"
         )
 
+    # miot SDK ``MIoTLan.is_cross_subnet`` 的 Tailscale subnet 兜底（见
+    # ``miloco.miot.cross_subnet_patch`` 文档）。必须在 manager.initialize() 之前完成——
+    # manager 初始化 SDK MIoTLan 实例时,is_cross_subnet 已绑到类层级,之后任何 patch
+    # 都不影响已存在的实例方法引用。失败不阻塞启动:patch 退化为"无注入" = 跟改前一致。
+    try:
+        from miloco.miot.cross_subnet_patch import (
+            patch_is_cross_subnet_for_tailscale_subnets,
+        )
+
+        n = patch_is_cross_subnet_for_tailscale_subnets()
+        logger.info(
+            "Tailscale subnet cross-subnet patch installed: %d extra nets", n
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "Tailscale subnet cross-subnet patch failed (continuing without): %s",
+            e,
+        )
+
     try:
         await get_manager().initialize()
         logger.info("Manager initialization completed")
